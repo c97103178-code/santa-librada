@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Santa Librada Asistencia</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<style>
+:root{--bg:#F5F8FB;--s:#fff;--ink:#13233F;--mu:#55627A;--ln:#D8E0EB;--br:#1F5FD6;--ok:#14935A;--wn:#B77700;--bad:#C23B3B}
+@media(prefers-color-scheme:dark){:root{--bg:#0E1626;--s:#16213A;--ink:#EAF0FA;--mu:#9AA9C4;--ln:#2A3858;--br:#6EA0FF;--ok:#3FCB8B;--wn:#E8B04A;--bad:#F07A7A}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:1.05rem/1.55 system-ui,Segoe UI,sans-serif}
+.w{max-width:44rem;margin:0 auto;padding:1rem}
+h1{font-size:1.6rem;margin:.5rem 0}h2{font-size:1.2rem;margin:.2rem 0 .6rem}
+nav{display:flex;gap:.5rem;margin:.8rem 0}
+button,.b{font:inherit;font-weight:600;cursor:pointer;border:1.5px solid var(--ink);background:var(--s);color:var(--ink);border-radius:.7rem;padding:.55rem .9rem;min-height:2.75rem}
+button.on{background:var(--br);border-color:var(--br);color:#fff}
+.card{background:var(--s);border:1px solid var(--ln);border-radius:1rem;padding:1rem;margin:.8rem 0}
+.cam{background:#000;border-radius:.8rem;overflow:hidden;aspect-ratio:4/3;display:grid;place-items:center;margin:.6rem 0}
+.cam video{width:100%;height:100%;object-fit:cover}.cam video:not(.live){display:none}.cam span{color:#9AA9C4;padding:1rem;text-align:center}
+.res{border:2px solid var(--ln);border-radius:.8rem;padding:.8rem 1rem;min-height:4.5rem;margin:.6rem 0}
+.res.ok{border-color:var(--ok)}.res.bad{border-color:var(--bad)}
+.nm{font-size:1.6rem;font-weight:800;line-height:1.2}.mu{color:var(--mu)}
+input{font:inherit;width:100%;padding:.55rem;margin:.3rem 0;border:1.5px solid var(--ln);border-radius:.6rem;background:var(--bg);color:var(--ink)}
+ul{list-style:none;padding:0;margin:0}li{display:flex;justify-content:space-between;gap:.6rem;padding:.45rem 0;border-bottom:1px solid var(--ln)}
+.Entrada{color:var(--ok);font-weight:700}.Salida{color:var(--wn);font-weight:700}.rej{color:var(--bad);font-weight:700}
+.pill{display:inline-block;padding:.2rem .8rem;border-radius:99px;font-weight:700;color:#fff}
+[hidden]{display:none!important}
+</style>
+</head>
+<body><div class="w">
+<h1>Santa Librada Asistencia</h1>
+<p class="mu">Sistema de asistencia con carné QR · Prototipo con datos de prueba</p>
+<p id="net" class="mu">● Conectando…</p>
+<nav><button id="tL" class="on">Lector (puerta)</button><button id="tP">Portal de padres</button></nav>
+
+<section id="vL">
+<div class="card">
+<h2>Escanear carné</h2>
+<div class="cam"><video id="vid" playsinline muted></video><span id="cm">La cámara está apagada.</span></div>
+<canvas id="cv" hidden></canvas>
+<button id="go">Activar cámara</button>
+<div id="res" class="res" aria-live="polite">Esperando lectura…</div>
+<input id="man" placeholder="Sin cámara: escribe el código del QR (ej. AC-0417)">
+<button id="mb">Registrar manualmente</button>
+</div>
+<div class="card"><h2>Últimas lecturas</h2><ul id="log"></ul></div>
+<details class="card"><summary><b>Estudiantes registrados</b></summary>
+<ul id="sl"></ul>
+<input id="nc" placeholder="Código del QR (ej. AC-0800)"><input id="nn" placeholder="Nombre del estudiante"><input id="np" placeholder="PIN del acudiente (4 dígitos)" inputmode="numeric">
+<button id="add">Guardar estudiante</button>
+</details>
+</section>
+
+<section id="vP" hidden>
+<div class="card"><h2>Seguimiento del estudiante</h2>
+<p class="mu">Ingresa el código del carné de tu hijo(a) y tu PIN de acudiente.</p>
+<input id="pc" placeholder="Código del carné (ej. AC-0417)"><input id="pp" placeholder="PIN" inputmode="numeric" type="password">
+<button id="pl">Ver seguimiento</button><div id="pm" class="mu"></div></div>
+<div id="pv" class="card" hidden></div>
+</section>
+</div>
+
+<script>
+(function(){
+/* Sala compartida: los dos celulares usan este mismo nombre (puedes cambiarlo, pero en ambos). */
+var T="sla-prueba-x7k4m9q2",U="https://ntfy.sh/"+T;
+var DEF={"AC-0417":{name:"John Dugan",pin:"1234"},"AC-0532":{name:"Ezequiel Rosario",pin:"1234"},"AC-0689":{name:"José Valdés",pin:"1234"},"AC-0701":{name:"Fiber Inestroza",pin:"1234"}};
+var S=JSON.parse(JSON.stringify(DEF)),E=[],cur=null;
+function fd(t){return new Date(t).toLocaleDateString("es",{weekday:"long",day:"numeric",month:"long"})}
+function fs(t){return new Date(t).toLocaleDateString("es",{day:"2-digit",month:"2-digit"})}
+function $(i){return document.getElementById(i)}
+function ft(t){return new Date(t).toLocaleTimeString("es",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}
+function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!==undefined)e.textContent=x;return e}
+function row(l,r,c){var li=el("li");li.appendChild(el("span","",l));li.appendChild(el("span",c,r));return li}
+function net(ok){var n=$("net");n.textContent=ok?"● Conectado al servidor":"● Sin conexión";n.style.color=ok?"var(--ok)":"var(--bad)"}
+
+/* Servidor compartido (ntfy.sh): publica y lee los eventos */
+function post(d){return fetch(U,{method:"POST",body:JSON.stringify(d)})}
+function sync(){return fetch(U+"/json?poll=1&since=all").then(function(r){return r.text()}).then(function(t){
+var ev=[],s=JSON.parse(JSON.stringify(DEF));
+t.split("\n").forEach(function(l){if(!l.trim())return;try{var m=JSON.parse(l);if(m.event!=="message")return;var d=JSON.parse(m.message);
+if(d.t==="reg")s[d.code]={name:d.name,pin:d.pin};else if(d.t==="ev")ev.push(d)}catch(e){}});
+S=s;E=ev;net(true);drawL();drawP()}).catch(function(){net(false)})}
+
+/* Pestañas */
+function tab(p){$("vL").hidden=p;$("vP").hidden=!p;$("tL").className=p?"":"on";$("tP").className=p?"on":"";if(p)drawP()}
+$("tL").onclick=function(){tab(false)};$("tP").onclick=function(){tab(true)};
+
+/* Lector */
+function show(c,a,b){var r=$("res");r.className="res "+c;r.textContent="";r.appendChild(el("div","nm",a));r.appendChild(el("div","mu",b))}
+function scan(raw){
+var code=String(raw).trim(),s=S[code],now=Date.now();
+if(!s){show("bad","Carné no registrado",ft(now)+" · "+code.slice(0,30));return}
+var last=null;for(var i=E.length-1;i>=0;i--){if(E[i].code===code){last=E[i];break}}
+var type=(last&&last.type==="Entrada")?"Salida":"Entrada";
+var d={t:"ev",code:code,name:s.name,type:type,ts:now};E.push(d);
+post(d).catch(function(){show("bad","No se pudo enviar al servidor","Revisa tu internet")});
+show("ok",s.name,fd(now)+" · Hora del escaneo: "+ft(now)+" · "+type);drawL()}
+function drawL(){var l=$("log");l.textContent="";var e=E.slice(-8).reverse();
+if(!e.length)l.appendChild(row("Aún no hay lecturas.","",""));
+e.forEach(function(x){l.appendChild(row(fs(x.ts)+" "+ft(x.ts)+" · "+x.name,x.type,x.type))});
+var s=$("sl");s.textContent="";Object.keys(S).forEach(function(k){s.appendChild(row(k+" · "+S[k].name,"PIN "+S[k].pin,"mu"))})}
+var stream=null,last="",lt=0,cv=$("cv"),vid=$("vid");
+function tick(){if(!stream)return;
+if(vid.readyState>=2&&vid.videoWidth){var w=vid.videoWidth,h=vid.videoHeight,c=cv.getContext("2d",{willReadFrequently:true});cv.width=w;cv.height=h;c.drawImage(vid,0,0,w,h);
+var r=jsQR(c.getImageData(0,0,w,h).data,w,h),n=Date.now();
+if(r&&r.data&&(r.data!==last||n-lt>4000)){last=r.data;lt=n;scan(r.data)}}
+requestAnimationFrame(tick)}
+$("go").onclick=function(){var b=this;
+if(stream){stream.getTracks().forEach(function(t){t.stop()});stream=null;vid.classList.remove("live");$("cm").style.display="";b.textContent="Activar cámara";return}
+if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){$("cm").textContent="La cámara solo funciona con HTTPS. Abre el enlace de GitHub Pages en Chrome.";return}
+navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}}).then(function(s){stream=s;vid.srcObject=s;vid.classList.add("live");vid.play();$("cm").style.display="none";b.textContent="Apagar cámara";tick()})
+.catch(function(){$("cm").textContent="No se pudo abrir la cámara. Acepta el permiso del navegador."})};
+$("mb").onclick=function(){if($("man").value.trim()){scan($("man").value);$("man").value=""}};
+$("add").onclick=function(){var c=$("nc").value.trim(),n=$("nn").value.trim(),p=$("np").value.trim();
+if(!c||!n||!p)return;S[c]={name:n,pin:p};post({t:"reg",code:c,name:n,pin:p});$("nc").value=$("nn").value=$("np").value="";drawL()};
+
+/* Portal de padres */
+$("pl").onclick=function(){var c=$("pc").value.trim(),s=S[c];
+if(s&&s.pin===$("pp").value.trim()){cur=c;$("pm").textContent=""}else{cur=null;$("pm").textContent="Código o PIN incorrecto."}drawP()};
+function drawP(){var v=$("pv");if(!cur||!S[cur]){v.hidden=true;return}
+var s=S[cur],e=E.filter(function(x){return x.code===cur}),today=new Date().toDateString();
+var td=e.filter(function(x){return new Date(x.ts).toDateString()===today}).reverse();
+v.hidden=false;v.textContent="";v.appendChild(el("div","nm",s.name));
+var inn=e.length&&e[e.length-1].type==="Entrada";
+var p=el("span","pill",inn?"Dentro del colegio":"Fuera del colegio");p.style.background=inn?"var(--ok)":"var(--wn)";
+var d=el("div");d.style.margin=".5rem 0";d.appendChild(p);v.appendChild(d);
+if(e.length)v.appendChild(el("div","mu","Último movimiento: "+e[e.length-1].type+" a las "+ft(e[e.length-1].ts)));
+var DN=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+var f0=new Date(E.length?E[0].ts:Date.now());f0.setHours(0,0,0,0);
+var days=[],asis=0,falt=0;
+for(var k=0;k<14;k++){var dd=new Date();dd.setHours(0,0,0,0);dd.setDate(dd.getDate()-k);if(dd<f0)break;var wd=dd.getDay();if(wd===0||wd===6)continue;
+var key=dd.toDateString(),ds=e.filter(function(x){return new Date(x.ts).toDateString()===key});
+var en=ds.filter(function(x){return x.type==="Entrada"})[0],sa=ds.filter(function(x){return x.type==="Salida"}).pop(),txt,cls;
+if(en){asis++;txt="Asistió · Entrada "+ft(en.ts)+(sa?" · Salida "+ft(sa.ts):"");cls="Entrada"}
+else if(k===0){txt="Sin registro aún";cls="mu"}
+else{falt++;txt="No asistió";cls="rej"}
+days.push([DN[wd]+" "+dd.getDate()+"/"+(dd.getMonth()+1),txt,cls])}
+v.appendChild(el("div","mu","Últimos 14 días: "+asis+" días asistidos · "+falt+" sin asistencia"));
+v.appendChild(el("h2","","Historial por día"));var u=el("ul");
+days.forEach(function(d){u.appendChild(row(d[0],d[1],d[2]))});v.appendChild(u)}
+sync();setInterval(sync,3000);
+})();
+</script>
+</body>
+</html>
