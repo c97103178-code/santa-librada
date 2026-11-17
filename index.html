@@ -102,10 +102,15 @@ if(!e.length)l.appendChild(row("Aún no hay lecturas.","",""));
 e.forEach(function(x){l.appendChild(row(fs(x.ts)+" "+ft(x.ts)+" · "+x.name,x.type,x.type))});
 var s=$("sl");s.textContent="";Object.keys(S).forEach(function(k){s.appendChild(row(k+" · "+S[k].name,"PIN "+S[k].pin,"mu"))})}
 var stream=null,last="",lt=0,cv=$("cv"),vid=$("vid");
+var bd=null;try{if(window.BarcodeDetector)bd=new BarcodeDetector({formats:["qr_code"]})}catch(e){bd=null}
+var busy=false;
+function got(v){var n=Date.now();if(v&&(v!==last||n-lt>4000)){last=v;lt=n;scan(v)}}
 function tick(){if(!stream)return;
-if(vid.readyState>=2&&vid.videoWidth){var w=vid.videoWidth,h=vid.videoHeight,c=cv.getContext("2d",{willReadFrequently:true});cv.width=w;cv.height=h;c.drawImage(vid,0,0,w,h);
-var r=jsQR(c.getImageData(0,0,w,h).data,w,h),n=Date.now();
-if(r&&r.data&&(r.data!==last||n-lt>4000)){last=r.data;lt=n;scan(r.data)}}
+if(vid.readyState>=2&&vid.videoWidth){
+if(bd){if(!busy){busy=true;bd.detect(vid).then(function(r){if(r&&r.length)got(r[0].rawValue)}).catch(function(){}).then(function(){busy=false})}}
+else if(typeof jsQR==="function"){var w=vid.videoWidth,h=vid.videoHeight,k=Math.min(1,640/w);w=Math.round(w*k);h=Math.round(h*k);var c=cv.getContext("2d",{willReadFrequently:true});cv.width=w;cv.height=h;c.drawImage(vid,0,0,w,h);
+var r=jsQR(c.getImageData(0,0,w,h).data,w,h,{inversionAttempts:"attemptBoth"});if(r&&r.data)got(r.data)}
+else{$("cm").style.display="";$("cm").textContent="No cargó el lector de QR. Revisa tu internet y recarga."}}
 requestAnimationFrame(tick)}
 $("go").onclick=function(){var b=this;
 if(stream){stream.getTracks().forEach(function(t){t.stop()});stream=null;vid.classList.remove("live");$("cm").style.display="";b.textContent="Activar cámara";return}
